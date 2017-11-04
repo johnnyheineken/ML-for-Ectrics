@@ -1,0 +1,84 @@
+---
+title: "Machine Learning - 1st Exercise"
+author: "Jan Hynek"
+date: "1 listopadu 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(tidyverse)
+str(iris)
+```
+```{r}
+head(iris)
+```
+
+```{r}
+summary(iris)
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+ggplot(data = iris) + 
+  geom_histogram(binwidth = 0.2, aes(x = iris$Sepal.Width,  fill = Species), col = "black", size = 1.2) +
+  xlab('Sepal Width') +
+  ylab('Frequency') + 
+  ggtitle('Histogram of Sepal Width')
+```
+
+```{r}
+ggplot(data = iris) + geom_density(aes(x = iris$Sepal.Length, fill = Species, col = Species), alpha = 0.5)+
+  xlab('Sepal Width') +
+  ylab('Density') + 
+  ggtitle('Iris dataset: Smoothed Density of Sepal Length per Species')
+```
+
+```{r}
+ggplot(iris) + 
+  geom_point(aes(x = iris$Sepal.Length, y=iris$Sepal.Width, col = Species, shape = Species)) +
+  geom_smooth(method = lm, aes(x = iris$Sepal.Length, y=iris$Sepal.Width, col = Species))+
+  xlab('Sepal Width') +
+  ylab('Sepal Length') + 
+  ggtitle('Scatterplot with smoothers') + theme_dark()
+```
+```{r}
+ggplot(iris) + 
+  geom_point(aes(x = iris$Sepal.Length, y=iris$Sepal.Width, col = Species, shape = Species)) +
+  geom_smooth(method = lm, aes(x = iris$Sepal.Length, y=iris$Sepal.Width, col = Species)) + facet_grid(. ~ Species) +
+  xlab('Sepal Width') +
+  ylab('Sepal Length') + 
+  ggtitle('Faceting') + theme_minimal()
+
+```
+
+```{r}
+iris %>% filter(Species == 'virginica') %>% summary
+```
+```{r}
+iris %>% select(starts_with('Petal')) %>% summary
+```
+
+```{r}
+iris_mut <- iris %>% 
+  mutate(Petal.Width.Rank = percent_rank(Petal.Width)) %>% 
+  arrange(Petal.Width.Rank)
+
+ggplot(iris_mut) + 
+  geom_jitter(aes(x=iris_mut$Petal.Width.Rank, y=iris_mut$Petal.Width, col = Species)) +
+  xlab('Petal.Width.Rank') + ylab('Petal.Width')
+```
+
