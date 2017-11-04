@@ -1,0 +1,51 @@
+---
+title: "DSinR - Chapter 7"
+author: "Jan Hynek"
+date: "4 listopadu 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+```
+
+```{r}
+ggplot(diamonds) +
+  geom_histogram(mapping = aes(x = x), binwidth = 0.5, fill = "blue")
+```
+```{r}
+ggplot(diamonds) +
+  geom_histogram(mapping = aes(x = z), binwidth = 0.5)
+
+```
+
+```{r}
+diamonds %>%
+  filter(z < 1 | z > 10) %>%
+  select(price, x, y, z, carat)
+```
+
+```{r}
+ggplot(diamonds) + 
+  geom_histogram(mapping = aes(x = price), binwidth = 50)
+```
+We can observe interesting dent around 1500. It is also worth noting that there is more diamonds with price 4xxx rather than with price 3xxx, what is kind of counterintuitive.
+```{r}
+ggplot(diamonds) + 
+  geom_histogram(mapping = aes(x = price), binwidth = ) + coord_cartesian(xlim = c(1000, 2000))
+```
+```{r}
+diamonds %>%
+  filter(between(carat, 0.99, 1.0)) %>%
+  group_by(carat) %>%
+  summarise(count = n())
+```
+```{r}
+
+```
+
+
+
