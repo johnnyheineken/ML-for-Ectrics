@@ -129,7 +129,5 @@ diamonds %>% mutate(price_perc = factor(ntile(price, 5))) %>%
   ggplot(mapping = aes(x = carat, y = ..density..)) + 
     geom_freqpoly(mapping = aes(colour = price_perc), binwidth = 0.1)
 ```
-```{r}
-diamonds %>% mutate(price_perc = factor(ntile(price, 6)))
-```
+
 
