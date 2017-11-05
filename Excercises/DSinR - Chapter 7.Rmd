@@ -8,10 +8,11 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-```{r}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
+library(corrr)
 ```
-
+## Exercises 7.3.4
 ```{r}
 ggplot(diamonds) +
   geom_histogram(mapping = aes(x = x), binwidth = 0.5, fill = "blue")
@@ -35,7 +36,7 @@ ggplot(diamonds) +
 We can observe interesting dent around 1500. It is also worth noting that there is more diamonds with price 4xxx rather than with price 3xxx, what is kind of counterintuitive.
 ```{r}
 ggplot(diamonds) + 
-  geom_histogram(mapping = aes(x = price), binwidth = ) + coord_cartesian(xlim = c(1000, 2000))
+  geom_histogram(mapping = aes(x = price), binwidth = 10) + coord_cartesian(xlim = c(1000, 2000))
 ```
 ```{r}
 diamonds %>%
@@ -43,9 +44,92 @@ diamonds %>%
   group_by(carat) %>%
   summarise(count = n())
 ```
+### 7.5.1.1 Exercises
+
 ```{r}
+nycflights13::flights %>% 
+  mutate(
+    cancelled = is.na(dep_time),
+    sched_hour = sched_dep_time %/% 100,
+    sched_min = sched_dep_time %% 100,
+    sched_dep_time = sched_hour + sched_min / 60
+  ) %>% 
+  ggplot(mapping = aes(x = sched_dep_time, y = ..density..)) + 
+    geom_freqpoly(mapping = aes(colour = cancelled), binwidth = 1)
 
 ```
 
+_What variable in the diamonds dataset is most important for predicting the price of a diamond? How is that variable correlated with cut? Why does the combination of those two relationships lead to lower quality diamonds being more expensive?_
 
+Let's have a look. Let's take all floating variables and correlate them:
+
+```{r}
+glimpse(diamonds)
+diamonds %>%
+  select(carat, depth, table, price, x, y, z) %>%
+  correlate() %>% focus(price)
+```
+We can see that carats are strongly correlated with 
+
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = cut, y = carat)) +
+  geom_boxplot()
+
+```
+
+We can observe, that Fair diamonds have slightly more carats the Good or Very Good cut diamonds.
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = carat, y = ..density..)) + 
+  geom_freqpoly(mapping = aes(colour = cut), binwidth = 0.2)
+```
+
+We can observe that fair cut diamonds tend to have more carats, and this might be the reason why they are more expensive.
+
+```{r}
+ggplot(data = diamonds, mapping = aes(x = carat, y = price)) + 
+  geom_violin(mapping = aes(colour = cut))
+
+```
+
+### 7.5.2.1 Exercises
+
+_How could you rescale the count dataset above to more clearly show the distribution of cut within colour, or colour within cut?_
+I decided to use percentile rank of each count. This scales shows more of the variability in the data.
+
+```{r}
+diamonds %>% 
+  count(color, cut) %>% mutate(p_rank = percent_rank(n)) %>%  
+  ggplot(mapping = aes(x = color, y = cut)) +
+    geom_tile(mapping = aes(fill = p_rank))
+
+
+
+```
+
+```{r}
+glimpse(nycflights13::flights)
+```
+
+```{r}
+nycflights13::flights %>% count(month, dest) %>%
+  ggplot(mapping = aes(x = month, y = dest)) +
+  geom_tile(aes(fill = n))
+```
+
+
+### 7.5.3.1 Exercises
+
+_Instead of summarising the conditional distribution with a boxplot, you could use a frequency polygon. What do you need to consider when using cut_width() vs cut_number()? How does that impact a visualisation of the 2d distribution of carat and price?_
+
+```{r}
+
+diamonds %>% mutate(price_perc = factor(ntile(price, 5))) %>%
+  ggplot(mapping = aes(x = carat, y = ..density..)) + 
+    geom_freqpoly(mapping = aes(colour = price_perc), binwidth = 0.1)
+```
+```{r}
+diamonds %>% mutate(price_perc = factor(ntile(price, 6)))
+```
 
