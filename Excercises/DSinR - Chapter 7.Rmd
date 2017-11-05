@@ -2,7 +2,7 @@
 title: "DSinR - Chapter 7"
 author: "Jan Hynek"
 date: "4 listopadu 2017"
-output: html_document
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}

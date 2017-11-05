@@ -2,7 +2,7 @@
 title: "Machine Learning - 1st Exercise"
 author: "Jan Hynek"
 date: "1 listopadu 2017"
-output: html_document
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}
