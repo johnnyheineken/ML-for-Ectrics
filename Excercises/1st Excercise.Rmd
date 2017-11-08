@@ -17,6 +17,8 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ```{r cars}
 library(tidyverse)
+library(ggThemeAssist)
+library(ggthemes)
 str(iris)
 ```
 ```{r}
@@ -37,14 +39,23 @@ ggplot(data = iris) +
   geom_histogram(binwidth = 0.2, aes(x = iris$Sepal.Width,  fill = Species), col = "black", size = 1.2) +
   xlab('Sepal Width') +
   ylab('Frequency') + 
-  ggtitle('Histogram of Sepal Width')
+  ggtitle('Histogram of Sepal Width') +
+  scale_color_economist() +
+  theme_economist() + theme(plot.subtitle = element_text(size = 11, 
+    colour = "mediumblue"), plot.caption = element_text(size = 13), 
+    panel.grid.major = element_line(linetype = "blank"), 
+    panel.grid.minor = element_line(linetype = "blank"), 
+    legend.position = "right") +labs(subtitle = "Graph we had to do on first assignment", 
+    caption = "Really cool man. Look at it. It really does really nice graphs")
 ```
 
 ```{r}
 ggplot(data = iris) + geom_density(aes(x = iris$Sepal.Length, fill = Species, col = Species), alpha = 0.5)+
   xlab('Sepal Width') +
   ylab('Density') + 
-  ggtitle('Iris dataset: Smoothed Density of Sepal Length per Species')
+  ggtitle('Iris dataset: Smoothed Density of Sepal Length per Species') +
+  scale_color_fivethirtyeight() +
+  theme_fivethirtyeight()
 ```
 
 ```{r}
@@ -53,7 +64,9 @@ ggplot(iris) +
   geom_smooth(method = lm, aes(x = iris$Sepal.Length, y=iris$Sepal.Width, col = Species))+
   xlab('Sepal Width') +
   ylab('Sepal Length') + 
-  ggtitle('Scatterplot with smoothers') + theme_dark()
+  ggtitle('Scatterplot with smoothers') +
+  scale_color_fivethirtyeight() +
+  theme_fivethirtyeight()
 ```
 ```{r}
 ggplot(iris) + 
@@ -79,6 +92,8 @@ iris_mut <- iris %>%
 
 ggplot(iris_mut) + 
   geom_jitter(aes(x=iris_mut$Petal.Width.Rank, y=iris_mut$Petal.Width, col = Species)) +
-  xlab('Petal.Width.Rank') + ylab('Petal.Width')
+  xlab('Petal.Width.Rank') + ylab('Petal.Width')+
+  scale_color_fivethirtyeight() +
+  theme_fivethirtyeight()
 ```
 

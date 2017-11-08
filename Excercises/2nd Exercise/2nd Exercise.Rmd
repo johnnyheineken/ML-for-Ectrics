@@ -1,0 +1,22 @@
+---
+title: "2nd Exercise - Machine Learning for Econometrics"
+author: "Jan Hynek"
+date: "7 listopadu 2017"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tm)
+library(text2vec)
+getSources()
+```
+
+```{r}
+job_adverts <- VCorpus(DirSource("vladi"))
+```
+
