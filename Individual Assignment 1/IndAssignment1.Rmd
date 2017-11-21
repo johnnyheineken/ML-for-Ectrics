@@ -1,0 +1,315 @@
+---
+title: "Individual Assignment 1"
+author: "Jan Hynek"
+date: "19 listopadu 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading Libraries
+```{r libraries, warning=FALSE,  message=FALSE}
+library(tidyverse)
+library(reshape2)
+library(purrr)
+library(viridis)
+library(ggthemes)
+library(assertthat)
+library(plotly)
+```
+
+
+## Exercise 1 - Transforming X using 9 Gaussian basis functions.
+_Transform the $x$ by using 9 Gaussian basis functions. Fix the parameters of your gaussian functions. Take note of the domain of the function when you select the parameter governing the spatial scale (i.e. $s$). Share your code and graph the results. You need to use your result in the succeeding questions. (1 point)_
+
+In this part I create functions, which are used throughout the script. They will be handy, as we are creating several different sizes of the dataset.
+
+This function creates data of the specified length. Returns two vectors in a dataframe - x, and target.
+```{r data_gen}
+data_gen <- function(n){
+  x <- runif(n, min = -1, max = 1)
+  noise <- rnorm(n, mean = 0, sd = 0.1)
+  target <- sin(2 * pi * x) + noise
+  return(data.frame(x, target))
+}
+```
+
+
+This is the gaussian basis function. Transforms the vector using gaussian function $\phi_j(x) = exp\left(\frac{(x-\mu_j)^2}{2s^2}\right) $.
+```{r gauss}
+gauss_basis <- function(x, mu, s_sq){
+  return(
+    exp(
+      (-(x - mu) ^ 2) / (2 * s_sq)
+    )
+  )
+}
+```
+
+This function takes dataset created from data_gen, and transforms it using 9 Gaussian basis functions. returns n times 11  matrix, where 1st columns is x, 2nd is target and next 9 are transformed gaussian bases. I can also modify $s^2$, however it is preset to 0.2. I will shortly present why.
+```{r gauss_basis}
+gauss_basis_gen <- function(data_frame, s_sq = 0.02) {
+#  x <- data_frame$x
+  result <- data_frame
+  counter <- 1
+  for (i in seq(-1, 1, 0.25)) {
+    result <- result %>% 
+      mutate(gauss_basis(x, mu = i, s_sq = s_sq))
+    colnames(result)[dim(result)[2]] <- paste('gauss', counter, sep = "_")
+    counter <- counter + 1
+  }
+  return(result)
+}
+```
+
+Now, we generate data using presented functions and plot them.
+```{r graph}
+my_values <- gauss_basis_gen(data_gen(100), s_sq = 0.02)
+
+my_values %>% 
+  melt(id.vars = c("x", "target"), variable.name = "gauss_fun") %>% 
+  ggplot(aes(x = x, y = value)) + 
+  geom_line(aes(colour = gauss_fun), size = 1) + 
+  geom_point(aes(y = target), alpha = 0.2, color = "indianred") + 
+  scale_color_viridis(discrete = TRUE, option = "inferno") + 
+  theme(plot.subtitle = element_text(vjust = 1), 
+    plot.caption = element_text(vjust = 1), 
+    panel.grid.major = element_line(colour = "gray94"), 
+    panel.grid.minor = element_line(linetype = "blank"), 
+    panel.background = element_rect(fill = NA))
+```
+
+
+We can observe that selected $s^2 = 0.2$ nicely fits on our  target data.
+
+
+
+## Exercise 2 - Regularized Least squares
+_Estimate the parameters using regularized least squares for sample sizes: 20,40,…,100. provide an overview table with point estimates for the parameters. (2 points)_
+
+In this section we first create function, which directly calculates RLS. This is done analytically.
+Function also checks, whether input is matrix.
+```{r regularized LS}
+RLS <- function(m, target, lambda) {
+  assert_that(is.matrix(m))
+  assert_that(is.matrix(target))
+  
+  w_RLS <- (solve(lambda * diag(dim(m)[2]) + t(m) %*% m) %*% t(m)) %*% target
+  return(w_RLS)
+}
+
+```
+
+
+
+Now we run for loop, each for different amount of data. There is trick used that I multiply i by twenty, and therefore create different amount of data using data_gen function.
+
+```{r}
+
+w_RLS_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_RLS_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+
+for (i in 1:5) {
+  values_gb <- data_gen(i * 20) %>% 
+    gauss_basis_gen()
+  
+  phi_mat <- values_gb %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  
+  t_mat <- as.matrix(values_gb$target)
+  
+  w_RLS_result[, i] <- RLS(m = phi_mat, 
+                                   target = t_mat, 
+                                   lambda = 0.2)
+}
+
+
+w_RLS_result
+```
+
+
+##Exercise 3
+
+_Estimate the parameters using bayesian linear regression assuming that the parameters have multivariate normal prior: 20, 40,…,100. Here, you can preselect the $\beta$ and $\alpha$. Provide an overview table with point estimates for the parameters. (2 points)_
+
+In this part I use two different methods. I use Bayesian Linear Regression with and without updating
+```{r}
+BLR <- function(m, target, alpha, beta) {
+  assert_that(is.matrix(m))
+  assert_that(is.matrix(target))
+  
+  m_0 <- rep(0, 9)
+  S_0 <- alpha * diag(1, 9)
+  
+  
+  S_N <- solve(solve(S_0) + beta * t(m) %*% m)
+  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(m) %*% target)
+  
+  
+  return(m_N)
+}
+```
+
+
+
+```{r}
+BLR_updating <- function(m, target, alpha, beta) {
+  assert_that(is.matrix(m))
+  assert_that(is.matrix(target))
+  #setting prior
+  m_0 <- as.matrix(rep(0, 9))
+  S_0 <- alpha * diag(1, 9)
+  # for proper working, m_N needs to be defined beforehand. Let's set it the same.
+  m_N <- m_0
+  S_N <- S_0
+  
+  
+  for (i in 1:dim(m)[1]) {
+    m_0 <- m_N # old posterior is new prior.
+    S_0 <- S_N
+    phi <- t(as.matrix(m[i, ]))
+    S_N <- solve(solve(S_0) + (beta * t(phi) %*% phi))
+    m_N <- S_N %*% (solve(S_0) %*% m_0 + (beta * t(phi) %*% target[i]))
+  }
+  
+  return(m_N)
+  
+}
+```
+
+
+
+
+
+```{r BLR results}
+w_BLR_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_BLR_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+
+w_BLRupd_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_BLRupd_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+
+
+
+for (i in 1:5) {
+  values_gb <- data_gen(i * 20) %>% 
+    gauss_basis_gen()
+  
+  phi_mat <- values_gb %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  
+  t_mat <- as.matrix(values_gb$target)
+  
+  w_BLR_result[, i] <- BLR(m = phi_mat, 
+                                   target = t_mat, 
+                                   alpha = 0.1, beta = 25)
+  w_BLRupd_result[, i] <- BLR_updating(m = phi_mat, 
+                                   target = t_mat, 
+                                   alpha = 0.1, beta = 25)
+}
+
+w_BLR_result
+
+```
+
+```{r}
+w_BLRupd_result
+```
+
+
+```{r}
+# values_gb <- data_gen(100) %>% 
+#     gauss_basis_gen()
+#   
+# phi_mat <- values_gb %>% 
+#     select(starts_with("gauss")) %>% 
+#     as.matrix()
+
+
+values_gb$pred_BLR <- (phi_mat %*% as.matrix(w_BLR_result[,5]))[, 1]
+values_gb$pred_BLRupd <- (phi_mat %*% as.matrix(w_BLRupd_result[,5]))[, 1]
+values_gb$pred_RLS <- (phi_mat %*% as.matrix(w_RLS_result[,5]))[, 1]
+
+values_gb %>% 
+  ggplot() + 
+  geom_line(aes(x = x, y = pred_BLR), color = "red") + 
+  geom_line(aes(x = x, y = (pred_BLRupd + 0.01)), color = "blue") +
+  geom_line(aes(x = x, y = (pred_RLS)), color = "green") +
+  geom_line(aes(x = x, y = sin(2*pi*x))) + 
+  geom_jitter(aes(x = x, y = target))
+
+
+```
+
+
+```{r}
+get_w_BLR <- function(my_values, target, alpha, beta){
+  phi_mat <- my_values %>% 
+    select(3:11) %>% 
+    as.matrix()
+  t_mat <- as.matrix(target)
+  return(BLR_updating(m = phi_mat, target = t_mat, alpha = alpha, beta = beta))
+}
+
+
+w_BLR_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_BLR_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+
+for (i in 1:5) {
+  values <- data_gen(i * 20)
+  target <- values$target
+  x <- values$x
+  w_BLR_result[, i] <- get_w_BLR(gauss_basis_gen(values), target = target, alpha = 0.1, beta = 2)
+}
+
+
+w_BLR_result
+```
+
+
+
+```{r}
+values <- data_gen(100)
+val_res <- values %>% gauss_basis_gen(s_sq = 0) %>% mutate(s_sq = 0)
+
+# create dataset of values for different S_sq
+for (i in 1:25) {
+  val_temp <- values %>% 
+    gauss_basis_gen(s_sq = 0.01 * i) %>% 
+    mutate(s_sq = 0.01 * i)
+  val_res <- rbind(val_res, val_temp)
+}
+
+# finding coefficients and then predictions for every set of data.
+val_res_2 <- values %>% mutate(preds = 0) %>% mutate(s_sq = 0)
+for (i in unique(val_res$s_sq)) {
+  val_temp <- val_res %>% filter(s_sq == i)
+  phi_mat <- val_temp %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  t_mat <- as.matrix(val_temp$target)
+  coefs <- RLS(m = phi_mat, 
+              target = t_mat, 
+              lambda = 0.2)
+  val_temp_2 <- cbind(values, phi_mat %*% as.matrix(coefs))
+  val_temp_2 <- cbind(val_temp_2, rep(i, 100))
+  colnames(val_temp_2) <- names(val_res_2)
+  val_res_2 <- rbind(val_res_2, val_temp_2)
+}
+  
+  
+
+val_res_2 <- val_res_2 %>% filter(s_sq != 0)
+
+# plotting !
+abc <- ggplot(val_res_2, aes(x = x, y = preds)) +
+  geom_point(aes(frame = s_sq)) + 
+  geom_line(aes(x = x, y = sin(2*pi*x)))
+abc <- ggplotly(abc)                
+
+abc
+```
+
