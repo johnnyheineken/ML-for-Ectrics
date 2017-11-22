@@ -18,6 +18,8 @@ library(viridis)
 library(ggthemes)
 library(assertthat)
 library(plotly)
+
+set.seed(921021)
 ```
 
 
@@ -332,6 +334,63 @@ plot_s_sq <- ggplotly(p) %>%
 plot_s_sq
 ```
 
+```{r, message=FALSE, warning=FALSE}
+####################
+# Exercise 4 - RLS #
+####################
+
+# generate data beforehand
+values <- data_gen(10)
+values_gaussbases <- values %>% 
+  gauss_basis_gen(s_sq = 0.1) %>% 
+  mutate(n = 10)
+
+for (i in 5:25) {
+  val_temp <- data_gen(i * 4) %>% 
+    gauss_basis_gen(s_sq = 0.1) %>% 
+    mutate(n = 4 * i)
+  values_gaussbases <- rbind(values_gaussbases, val_temp)
+}
+
+# finding coefficients and then predictions for every set of data.
+values_predictions <- values %>% 
+  mutate(preds = 0) %>% 
+  mutate(n = 0)
+
+for (i in unique(values_gaussbases$n)) {
+  val_temp <- values_gaussbases %>% filter(n == i) %>% arrange(x)
+  phi_mat <- val_temp %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  t_mat <- as.matrix(val_temp$target)
+  coefs <- BLR(phi_mat = phi_mat, 
+               target = t_mat, alpha = 0.5, beta = 10)
+  
+  val_temp_2 <- cbind(val_temp$x, val_temp$target, phi_mat %*% as.matrix(coefs))
+  val_temp_2 <- cbind(val_temp_2, rep(i, i))
+  # print(dim(val_temp_2))
+  colnames(val_temp_2) <- names(values_predictions)
+  values_predictions <- rbind(values_predictions, val_temp_2)
+}
+
+
+# 
+values_predictions <- values_predictions %>% 
+   filter(n != 0)
+
+# plotting !
+p <- ggplot(values_predictions, aes(x = x, y = preds)) +
+  geom_line(aes(frame = n), color = "red") + 
+  geom_point(aes(x = x, y = target, frame = n), alpha = 0.2) + 
+  geom_line(aes(x = x, y = sin(2 * pi * x)), alpha = 0.4)
+plot_s_sq <- ggplotly(p) %>%
+  animation_opts(easing = "linear",redraw = TRUE)
+plot_s_sq
+```
+
+
+
+
 ```{r}
 #########
 # Ex 5  #
@@ -347,12 +406,12 @@ BLR_iter <- function(phi_mat, target, alpha, beta, m_N_old, S_N_old){
   assert_that(is.matrix(phi_mat))
   assert_that(is.matrix(target))
   
-  m_0 <- m_N_old
-  S_0 <- S_N_old
+  # m_0 <- m_N_old
+  # S_0 <- S_N_old
   
   
-  S_N <- solve(solve(S_0) + beta * t(phi_mat) %*% phi_mat)
-  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(phi_mat) %*% target)
+  S_N <- solve(alpha * diag(1, 9) + beta * t(phi_mat) %*% phi_mat)
+  m_N <- beta * S_N %*%  t(phi_mat) %*% target
   
   
   return(list(m_N, S_N))
@@ -366,10 +425,10 @@ BLR_optimal <- function(phi_mat, t_mat,
                         max_n_iter = 1000, 
                         min_d_alpha = 0.001, 
                         min_d_beta = 0.001, 
-                        echo = FALSE){
+                        echo = FALSE, mean_prior = 2){
   alpha <- 0.5
-  beta <- 20
-  m_N <- as.matrix(rep(0, 9))
+  beta <- 10
+  m_N <- as.matrix(rep(mean_prior, 9))
   S_N <- alpha * diag(1, 9)
   iteration <- 1 
   d_alpha <- 10
@@ -421,14 +480,16 @@ colnames(w_BLRopt_result) <- c(paste("n", (1:5) * 20, sep = "_"))
 
 
 for (i in 1:5) {
-  create_test_data(n = (20 * i), s_sq = 0.05)
-  w_BLRopt_result[, i] <- BLR_optimal(phi_mat, t_mat)
+  create_test_data(n = (20 * i), s_sq = 0.02)
+  w_BLRopt_result[, i] <- BLR_optimal(phi_mat, t_mat, echo = TRUE)
 }
 ```
 
 ```{r}
 w_BLRopt_result
 ```
+
+
 ```{r}
 # generate data beforehand
 values <- data_gen(10)
