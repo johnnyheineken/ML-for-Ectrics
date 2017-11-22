@@ -340,3 +340,84 @@ plot_s_sq <- ggplot(values_predictions, aes(x = x, y = preds)) +
 plot_s_sq <- ggplotly(plot_s_sq)                
 plot_s_sq
 
+
+#########
+# Ex 5  #
+#########
+
+w_BLR_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_BLR_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+beta <- 10
+alpha <- 0.2
+
+
+BLR_iter <- function(phi_mat, target, alpha, beta, m_N_old, S_N_old){
+  assert_that(is.matrix(phi_mat))
+  assert_that(is.matrix(target))
+  
+  m_0 <- m_N_old
+  S_0 <- alpha * S_N_old
+  
+  
+  S_N <- solve(solve(S_0) + beta * t(phi_mat) %*% phi_mat)
+  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(phi_mat) %*% target)
+  
+  
+  return(list(m_N, S_N))
+}
+
+
+
+
+
+BLR_optimal <- function(phi_mat, t_mat, 
+                        max_n_iter = 1000, 
+                        min_d_alpha = 0.01, 
+                        min_d_beta = 0.01){
+  alpha <- 0.1
+  beta <- 0.1
+  m_N <- as.matrix(rep(0, 9))
+  S_N <- alpha * diag(1, 9)
+  iteration <- 1 
+  d_alpha <- 10
+  d_beta <- 10
+  
+  while ((iteration < max_n_iter) & ((abs(d_alpha) > min_d_alpha) | (abs(d_beta) > min_d_beta))) {
+    lambdas <- eigen(beta * t(phi_mat) %*% phi_mat)$values
+    gamma <- 0
+    for (lambda in lambdas) {
+      gamma <- gamma + (lambda/(alpha + lambda))
+    }
+    
+    iter_mN_SN <- BLR_iter(phi_mat = phi_mat, 
+                           target = t_mat, 
+                           alpha = alpha, beta = beta, 
+                           m_N_old = m_N, 
+                           S_N_old = S_N)
+    m_N <- iter_mN_SN[[1]]
+    S_N <- iter_mN_SN[[2]]
+    SSR <- 0
+    for (i in 1:nrow(phi_mat)) {
+      SSR <- SSR + (t_mat[i, ] - (t(m_N) %*% phi_mat[i, ]))^2
+    }
+    
+    d_alpha <- (gamma / (t(m_N) %*% m_N)) - alpha
+    alpha <- as.numeric(alpha + d_alpha)
+    
+    d_beta <- (1/((1 / (nrow(phi_mat) - gamma)) * SSR)) - beta
+    beta <- as.numeric(beta + d_beta)
+    iteration <- iteration + 1
+  }
+  
+  print(iteration)
+  print(as.numeric(d_alpha))
+  print(as.numeric(d_beta))
+  print(alpha)
+  print(beta)
+  return(m_N)
+}
+
+
+create_test_data()
+BLR_optimal(phi_mat, t_mat)
+
