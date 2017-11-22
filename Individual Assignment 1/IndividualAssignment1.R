@@ -45,9 +45,29 @@ gauss_basis_gen <- function(data_frame, s_sq = 0.2) {
   return(result)
 }
 
-my_values <- gauss_basis_gen(data_gen(100), s_sq = 0.02)
+# this function  quickly creates test data. It will be handy throughout the analysis.
+# variables are stored in global env. And because it is annoying 
+# in the editor, I also create them once here.
+values_gb <- data_gen(100) %>% 
+  gauss_basis_gen()
+phi_mat <- values_gb %>% 
+  select(starts_with("gauss")) %>% 
+  as.matrix()
+t_mat <- as.matrix(values_gb$target) 
 
-my_values %>% 
+
+create_test_data <- function(n = 100, s_sq = 0.02) {
+  values_gb <<- data_gen(n) %>% 
+    gauss_basis_gen(s_sq)
+  phi_mat <<- values_gb %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  t_mat <<- as.matrix(values_gb$target)  
+}
+
+
+
+values_gb %>% 
   melt(id.vars = c("x", "target"), variable.name = "gauss_fun") %>% 
   ggplot(aes(x = x, y = value)) + 
   geom_line(aes(colour = gauss_fun), size = 1) + 
@@ -69,11 +89,11 @@ my_values %>%
 #####################
 
 
-RLS <- function(m, target, lambda) {
-  assert_that(is.matrix(m))
+RLS <- function(phi_mat, target, lambda) {
+  assert_that(is.matrix(phi_mat))
   assert_that(is.matrix(target))
   
-  w_RLS <- (solve(lambda * diag(dim(m)[2]) + t(m) %*% m) %*% t(m)) %*% target
+  w_RLS <- (solve(lambda * diag(dim(phi_mat)[2]) + t(phi_mat) %*% phi_mat) %*% t(phi_mat)) %*% target
   return(w_RLS)
 }
 
@@ -82,23 +102,16 @@ get_w_RLS <- function(my_values, target, lambda){
     select(3:11) %>% 
     as.matrix()
   t_mat <- as.matrix(target)
-  return(RLS(m = phi_mat, target = t_mat, lambda = lambda))
+  return(RLS(phi_mat = phi_mat, target = t_mat, lambda = lambda))
 }
 
 w_RLS_result <- matrix(ncol = 5, nrow = 9)
 colnames(w_RLS_result) <- c(paste("n", (1:5) * 20, sep = "_"))
 
 for (i in 1:5) {
-  values_gb <- data_gen(i * 20) %>% 
-    gauss_basis_gen()
+  create_test_data(n = (20 * i))
   
-  phi_mat <- values_gb %>% 
-    select(starts_with("gauss")) %>% 
-    as.matrix()
-  
-  t_mat <- as.matrix(values_gb$target)
-  
-  w_RLS_result[, i] <- RLS(m = phi_mat, 
+  w_RLS_result[, i] <- RLS(phi_mat = phi_mat, 
                                    target = t_mat, 
                                    lambda = 0.2)
 }
@@ -111,24 +124,24 @@ w_RLS_result
 ## Bayesian Linear reg ##
 #########################
 
-BLR <- function(m, target, alpha, beta){
-  assert_that(is.matrix(m))
+BLR <- function(phi_mat, target, alpha, beta){
+  assert_that(is.matrix(phi_mat))
   assert_that(is.matrix(target))
   
   m_0 <- rep(0, 9)
   S_0 <- alpha * diag(1, 9)
   
   
-  S_N <- solve(solve(S_0) + beta * t(m) %*% m)
-  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(m) %*% target)
+  S_N <- solve(solve(S_0) + beta * t(phi_mat) %*% phi_mat)
+  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(phi_mat) %*% target)
   
   
   return(m_N)
 }
 
 
-BLR_updating <- function(m, target, alpha, beta) {
-  assert_that(is.matrix(m))
+BLR_updating <- function(phi_mat, target, alpha, beta) {
+  assert_that(is.matrix(phi_mat))
   assert_that(is.matrix(target))
   
   m_0 <- as.matrix(rep(0, 9))
@@ -138,10 +151,10 @@ BLR_updating <- function(m, target, alpha, beta) {
   
   steps <- list()
   
-  for (i in 1:dim(m)[1]) {
+  for (i in 1:dim(phi_mat)[1]) {
     m_0 <- m_N
     S_0 <- S_N
-    phi <- t(as.matrix(m[i, ]))
+    phi <- t(as.matrix(phi_mat[i, ]))
     S_N <- solve(solve(S_0) + (beta * t(phi) %*% phi))
     m_N <- S_N %*% (solve(S_0) %*% m_0 + (beta * t(phi) %*% target[i]))
     steps[[i]] <- m_N 
@@ -156,16 +169,8 @@ colnames(w_BLR_result) <- c(paste("n", (1:5) * 20, sep = "_"))
 
 
 for (i in 1:5) {
-  values_gb <- data_gen(i * 20) %>% 
-    gauss_basis_gen()
-  
-  phi_mat <- values_gb %>% 
-    select(starts_with("gauss")) %>% 
-    as.matrix()
-  
-  t_mat <- as.matrix(values_gb$target)
-  
-  w_BLR_result[, i] <- BLR_updating(m = phi_mat, 
+  create_test_data(n = (20 * i))
+  w_BLR_result[, i] <- BLR_updating(phi_mat = phi_mat, 
                            target = t_mat, 
                            alpha = 0.1, beta = 25)
 }
@@ -176,12 +181,7 @@ w_BLR_result
 # s_sq interactive graph #
 ##########################
 
-values_gb <- data_gen(100) %>% 
-  gauss_basis_gen()
-
-phi_mat <- values_gb %>% 
-  select(starts_with("gauss")) %>% 
-  as.matrix()
+create_test_data()
 
 predicted_vals <- phi_mat %*% as.matrix(w_BLR_result[,5])
 values_gb$pred_BLR <- predicted_vals[,1]
@@ -215,7 +215,7 @@ for (i in unique(values_gaussbases$s_sq)) {
     select(starts_with("gauss")) %>% 
     as.matrix()
   t_mat <- as.matrix(val_temp$target)
-  coefs <- RLS(m = phi_mat, 
+  coefs <- RLS(phi_mat = phi_mat, 
               target = t_mat, 
               lambda = 0.2)
   val_temp_2 <- cbind(values, phi_mat %*% as.matrix(coefs))
@@ -243,7 +243,9 @@ plot_s_sq
 
 # generate data beforehand
 values <- data_gen(10)
-values_gaussbases <- values %>% gauss_basis_gen(s_sq = 0.02) %>% mutate(n = 10)
+values_gaussbases <- values %>% 
+  gauss_basis_gen(s_sq = 0.02) %>% 
+  mutate(n = 10)
 
 for (i in 5:25) {
   val_temp <- data_gen(i * 4) %>% 
@@ -263,7 +265,7 @@ for (i in unique(values_gaussbases$n)) {
     select(starts_with("gauss")) %>% 
     as.matrix()
   t_mat <- as.matrix(val_temp$target)
-  coefs <- RLS(m = phi_mat, 
+  coefs <- RLS(phi_mat = phi_mat, 
                target = t_mat, 
                lambda = 0.1)
   
@@ -315,7 +317,7 @@ for (i in unique(values_gaussbases$n)) {
     select(starts_with("gauss")) %>% 
     as.matrix()
   t_mat <- as.matrix(val_temp$target)
-  coefs <- RLS(m = phi_mat, 
+  coefs <- RLS(phi_mat = phi_mat, 
                target = t_mat, 
                lambda = 25)
   
