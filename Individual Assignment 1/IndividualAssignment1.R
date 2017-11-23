@@ -172,7 +172,7 @@ for (i in 1:5) {
   create_test_data(n = (20 * i))
   w_BLR_result[, i] <- BLR_updating(phi_mat = phi_mat, 
                            target = t_mat, 
-                           alpha = 0.1, beta = 25)
+                           alpha = 0.5, beta = 25)
 }
 
 w_BLR_result
@@ -351,33 +351,24 @@ beta <- 10
 alpha <- 0.2
 
 
-BLR_iter <- function(phi_mat, target, alpha, beta, m_N_old, S_N_old){
+BLR_iter <- function(phi_mat, target, alpha, beta){
   assert_that(is.matrix(phi_mat))
   assert_that(is.matrix(target))
   
-  m_0 <- m_N_old
-  S_0 <- S_N_old
-  
-  
-  S_N <- solve(solve(S_0) + beta * t(phi_mat) %*% phi_mat)
-  m_N <- S_N %*% (solve(S_0) %*% m_0 + beta * t(phi_mat) %*% target)
+  S_N <- solve(alpha * diag(1, 9) + beta * t(phi_mat) %*% phi_mat)
+  m_N <- beta * S_N %*%  t(phi_mat) %*% target
   
   
   return(list(m_N, S_N))
 }
 
-
-
-
-
 BLR_optimal <- function(phi_mat, t_mat, 
                         max_n_iter = 1000, 
                         min_d_alpha = 0.001, 
-                        min_d_beta = 0.001){
+                        min_d_beta = 0.001, 
+                        echo = FALSE) {
   alpha <- 0.5
-  beta <- 20
-  m_N <- as.matrix(rep(0, 9))
-  S_N <- alpha * diag(1, 9)
+  beta <- 5
   iteration <- 1 
   d_alpha <- 10
   d_beta <- 10
@@ -392,9 +383,8 @@ BLR_optimal <- function(phi_mat, t_mat,
     
     iter_mN_SN <- BLR_iter(phi_mat = phi_mat, 
                            target = t_mat, 
-                           alpha = alpha, beta = beta, 
-                           m_N_old = m_N, 
-                           S_N_old = S_N)
+                           alpha = alpha, 
+                           beta = beta)
     m_N <- iter_mN_SN[[1]]
     S_N <- iter_mN_SN[[2]]
     SSR <- 0
@@ -409,16 +399,17 @@ BLR_optimal <- function(phi_mat, t_mat,
     beta <- as.numeric(beta + d_beta)
     iteration <- iteration + 1
   }
-  
-  print(iteration)
-  print(as.numeric(d_alpha))
-  print(as.numeric(d_beta))
-  print(alpha)
-  print(beta)
+  if (echo) {
+    print(iteration)
+    print(as.numeric(d_alpha))
+    print(as.numeric(d_beta))
+    print(alpha)
+    print(beta)
+  }
   return(m_N)
 }
 
 
-create_test_data()
-BLR_optimal(phi_mat, t_mat)
+create_test_data(n = 10, s_sq = 0.02)
+BLR_optimal(phi_mat, t_mat, echo = TRUE)
 

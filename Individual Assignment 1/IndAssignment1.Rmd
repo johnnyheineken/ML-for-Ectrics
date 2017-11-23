@@ -18,6 +18,11 @@ library(viridis)
 library(ggthemes)
 library(assertthat)
 library(plotly)
+library(ggthemes)
+
+
+font.add.google("Lato", "lato")
+font.add.google("Raleway", "raleway")
 
 set.seed(921021)
 ```
@@ -100,24 +105,28 @@ my_theme <- theme(plot.subtitle = element_text(vjust = 1),
 
 Now, we generate data using presented functions and plot them.
 ```{r graph}
+
+create_test_data(s_sq = 0.02)
 values_gb %>% 
   melt(id.vars = c("x", "target"), variable.name = "gauss_fun") %>% 
   ggplot(aes(x = x, y = value)) + 
   geom_line(aes(colour = gauss_fun), size = 1) + 
-  geom_point(aes(y = target), alpha = 0.2, color = "indianred") + 
-  scale_color_viridis(discrete = TRUE, option = "inferno") + my_theme
+  geom_point(aes(y = target, colour = "target"), alpha = 0.1) + 
+  ggtitle("Gaussian bases and target data for s_sq = 0.02") +   
+  theme(text = element_text(family = "raleway")) + my_theme
 ```
 Selecting $s^2$ is tricky. It seems as a good option to fit $s^2 = 0.02$, as then four of the gaussian bases would fit nicely at the sinusoid.
 
 We can also have a look at  $s^2 = 0.1$:
 ```{r}
-create_test_data(s_sq=0.1)
+create_test_data(s_sq = 0.1)
 values_gb %>% 
   melt(id.vars = c("x", "target"), variable.name = "gauss_fun") %>% 
   ggplot(aes(x = x, y = value)) + 
   geom_line(aes(colour = gauss_fun), size = 1) + 
-  geom_point(aes(y = target), alpha = 0.2, color = "indianred") + 
-  scale_color_viridis(discrete = TRUE, option = "inferno") + my_theme
+  geom_point(aes(y = target, colour = "target"), alpha = 0.1) + 
+  theme_pander() + 
+  scale_colour_pander() + ggtitle("Gaussian bases and target data for s_sq = 0.1")
 ```
 
 
@@ -131,8 +140,9 @@ values_gb %>%
   melt(id.vars = c("x", "target"), variable.name = "gauss_fun") %>% 
   ggplot(aes(x = x, y = value)) + 
   geom_line(aes(colour = gauss_fun), size = 1) + 
-  geom_point(aes(y = target), alpha = 0.2, color = "indianred") + 
-  scale_color_viridis(discrete = TRUE, option = "inferno") + my_theme
+  geom_point(aes(y = target, colour = "target"), alpha = 0.1) + 
+  theme_pander() + 
+  scale_colour_pander() + ggtitle("Gaussian bases and target data for s_sq = 0.2")
 ```
 
 
@@ -246,9 +256,7 @@ for (i in 1:5) {
                                    target = t_mat, 
                                    alpha = 1, beta = 25)
 }
-```
 
-```{r}
 w_BLR_result
 
 ```
@@ -256,7 +264,7 @@ w_BLR_result
 ```{r}
 w_BLRupd_result
 ```
-We can observe that both of these methods provide us with identical weights. Therefore I will use easier method without updating afterwards.
+We can observe that both of these methods provide us with identical weights. Therefore I will use easier method without updating later on in the assignment.
 
 
 
@@ -330,11 +338,12 @@ plot_interactive_graph_BLS_RLS <- function(s_squared,
   
   # plotting !
   p <- ggplot(values_predictions, aes(x = x))  +
-    geom_line(aes(y = preds_BLR, frame = n, colour = "BLR")) +
-    geom_line(aes(y = (preds_RLS), frame = n, colour = "RLS")) + 
-    geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.2) + 
-    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.4) + 
-    my_theme + labs(y = "predictions and targets")
+    geom_line(aes(y = preds_BLR, frame = n, colour = sprintf("BLR, alpha = %s, beta = %s", alpha_BLR, beta_BLR))) +
+    geom_line(aes(y = preds_RLS, frame = n, colour = sprintf("RLS, lambda = %s", lambda_RLS))) + 
+    geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.3) + 
+    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.3)  +
+    ggtitle(sprintf("Comparision of performance of RLS and BLR when s_squared = %s", s_squared)) + 
+    labs(y = "predictions and targets", colour = "colours") + my_theme
   plot <- ggplotly(p) %>%
     animation_opts(easing = "linear",redraw = FALSE)
   plot
@@ -354,7 +363,7 @@ plot_interactive_graph_BLS_RLS(s_squared = 0.1, lambda_RLS = 1, alpha_BLR = 1, b
 
 In the following graph I have set $s^2$ to smaller value, and at this moment BLR is prone to overfitting of the values and even though it is better performing with small amount of observations, for higher amount of observations it is outperformed by strongly restricted RLS, which better 
 
-```{r BLS RLS 2}
+```{r BLS RLS 2, warning=FALSE, error=FALSE, message}
 plot_interactive_graph_BLS_RLS(s_squared = 0.05, lambda_RLS = 1, alpha_BLR = 1, beta_BLR = 25)
 ```
 
@@ -520,7 +529,7 @@ plot_interactive_graph <- function(s_squared,
     geom_line(aes(y = preds_BLR, frame = n, colour = "BLR")) +
     geom_line(aes(y = (preds_RLS), frame = n, colour = "RLS")) + 
     geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.2) + 
-    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x"), alpha = 0.4) + 
+    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.4) + 
     my_theme
   plot_s_sq <- ggplotly(p) %>%
     animation_opts(easing = "linear",redraw = FALSE)
