@@ -5,6 +5,7 @@ library(viridis)
 library(ggthemes)
 library(assertthat)
 library(plotly)
+library(ggthemes)
 
 my_fun <- function(n){
   x <- runif(n, min = -1, max = 1)
@@ -412,4 +413,170 @@ BLR_optimal <- function(phi_mat, t_mat,
 
 create_test_data(n = 10, s_sq = 0.02)
 BLR_optimal(phi_mat, t_mat, echo = TRUE)
+
+
+
+
+
+plot_interactive_graph_BLS_RLS <- function(s_squared, 
+                                           lambda_RLS = 0.01, 
+                                           alpha_BLR = 1, 
+                                           beta_BLR = 25, n_obs = 101) {
+  values <- data_gen(10)
+  values_gaussbases <- values %>% 
+    gauss_basis_gen(s_sq = s_squared) %>% 
+    mutate(n = 10)
+  
+  for (i in 5:25) {
+    val_temp <- data_gen(i * 4) %>% 
+      gauss_basis_gen(s_sq = s_squared) %>% 
+      mutate(n = 4 * i)
+    values_gaussbases <- rbind(values_gaussbases, val_temp)
+  }
+  
+  # finding coefficients and then predictions for every set of data.
+  values_predictions <- values %>% 
+    mutate(preds_BLR = 0)  %>%  
+    mutate(preds_RLS = 0) %>%
+    mutate(n = 0)
+  
+  
+  
+  # values_preds_temp <- data_gen(n_obs)  %>% # OCD unfriendly
+  #   gauss_basis_gen(s_sq = s_squared) %>% 
+  #   mutate(n = 0)
+  # phi_mat_temp <- values_preds_temp %>% 
+  #     select(starts_with("gauss")) %>% 
+  #     as.matrix()
+  
+  for (i in unique(values_gaussbases$n)) {
+    val_temp <- values_gaussbases %>% filter(n == i)
+    
+    phi_mat <- val_temp %>% 
+      select(starts_with("gauss")) %>% 
+      as.matrix()
+    t_mat <- as.matrix(val_temp$target)
+    
+    coefs_RLS    <- RLS(phi_mat, t_mat, lambda = lambda_RLS)
+    coefs_BLR    <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    
+    val_temp_2 <- cbind(val_temp$x, 
+                        val_temp$target, 
+                        phi_mat %*% as.matrix(coefs_BLR), 
+                        phi_mat %*% as.matrix(coefs_RLS),
+                        rep(i, n_obs))
+    
+    # print(dim(val_temp_2))
+    colnames(val_temp_2) <- names(values_predictions)
+    values_predictions <- rbind(values_predictions, val_temp_2)
+  }
+  values_predictions <- values_predictions %>% 
+    filter(n != 0)
+  
+  # plotting !
+  p <- ggplot(values_predictions, aes(x = x))  +
+    geom_line(aes(y = preds_BLR, frame = n, colour = sprintf("BLR, alpha = %s, beta = %s", alpha_BLR, beta_BLR))) +
+    geom_line(aes(y = preds_RLS, frame = n, colour = sprintf("RLS, lambda = %s", lambda_RLS))) +
+    geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.3) + 
+    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.3)  +
+    ggtitle(sprintf("Comparision of performance of RLS and BLR when s_squared = %s", s_squared)) + 
+    labs(y = "predictions and targets", colour = "colours") + my_theme
+  
+  plot <- ggplotly(p,
+                   hoverinfo = 'text',
+                   text = ~paste('Species: ', Species,
+                                 '</br> Petal Lenght: ', rmse_BLR,
+                                 '</br> Petal Width: ', rmse_RLS)) %>%
+    animation_opts(easing = "linear",redraw = TRUE)
+  rmse <- values_predictions %>% 
+    group_by(n) %>% 
+    select(n, rmse_BLR, rmse_RLS) %>% 
+    summarise(rmse_BLR = mean(rmse_BLR), rmse_RLS = mean(rmse_RLS)) %>% filter(n%%20 == 0)
+  print(rmse)
+  plot
+  
+}
+
+
+
+
+#```{r plot_interactive_graph_BLS_RLS, message=FALSE, warning=FALSE, echo=FALSE}
+####################
+# Exercise 4 - RLS  - graph#
+####################
+
+plot_interactive_graph_BLS_RLS <- function(s_squared, 
+                                           lambda_RLS = 0.01, 
+                                           alpha_BLR = 1, 
+                                           beta_BLR = 25, n_obs = 101) {
+  values <- data_gen(10)
+  values_gaussbases <- values %>% 
+    gauss_basis_gen(s_sq = s_squared) %>% 
+    mutate(n = 10)
+  
+  for (i in 5:25) {
+    val_temp <- data_gen(i * 4) %>% 
+      gauss_basis_gen(s_sq = s_squared) %>% 
+      mutate(n = 4 * i)
+    values_gaussbases <- rbind(values_gaussbases, val_temp)
+  }
+  
+  # finding coefficients and then predictions for every set of data.
+  values_predictions <- values %>% 
+    mutate(preds_BLR = 0)  %>%  
+    mutate(preds_RLS = 0) %>%
+    mutate(n = 0)
+  
+  
+  
+  values_preds_temp <- data_gen(n_obs)  %>% # OCD unfriendly
+    gauss_basis_gen(s_sq = s_squared) %>% 
+    mutate(n = 0)
+  phi_mat_temp <- values_preds_temp %>% 
+    select(starts_with("gauss")) %>% 
+    as.matrix()
+  
+  for (i in unique(values_gaussbases$n)) {
+    val_temp <- values_gaussbases %>% filter(n == i)
+    
+    phi_mat <- val_temp %>% 
+      select(starts_with("gauss")) %>% 
+      as.matrix()
+    t_mat <- as.matrix(val_temp$target)
+    
+    coefs_RLS    <- RLS(phi_mat, t_mat, lambda = lambda_RLS)
+    coefs_BLR    <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    
+    val_temp_2 <- cbind(values_preds_temp$x, 
+                        values_preds_temp$target, 
+                        phi_mat_temp %*% as.matrix(coefs_BLR), 
+                        phi_mat_temp %*% as.matrix(coefs_RLS),
+                        rep(i, n_obs))
+    
+    # print(dim(val_temp_2))
+    colnames(val_temp_2) <- names(values_predictions)
+    values_predictions <- rbind(values_predictions, val_temp_2)
+  }
+  
+  
+  # 
+  values_predictions <- values_predictions %>% 
+    filter(n != 0)
+  
+  # plotting !
+  p <- ggplot(values_predictions, aes(x = x))  +
+    geom_line(aes(y = preds_BLR, frame = n, colour = sprintf("BLR, alpha = %s, beta = %s", alpha_BLR, beta_BLR))) +
+    geom_line(aes(y = preds_RLS, frame = n, colour = sprintf("RLS, lambda = %s", lambda_RLS))) + 
+    geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.3) + 
+    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.3)  +
+    ggtitle(sprintf("Comparision of performance of RLS and BLR when s_squared = %s", s_squared)) + 
+    labs(y = "predictions and targets", colour = "colours") + my_theme
+  plot <- ggplotly(p) %>%
+    animation_opts(easing = "linear",redraw = FALSE)
+  plot
+}
+
+
+
+
 

@@ -21,8 +21,6 @@ library(plotly)
 library(ggthemes)
 
 
-font.add.google("Lato", "lato")
-font.add.google("Raleway", "raleway")
 
 set.seed(921021)
 ```
@@ -112,8 +110,7 @@ values_gb %>%
   ggplot(aes(x = x, y = value)) + 
   geom_line(aes(colour = gauss_fun), size = 1) + 
   geom_point(aes(y = target, colour = "target"), alpha = 0.1) + 
-  ggtitle("Gaussian bases and target data for s_sq = 0.02") +   
-  theme(text = element_text(family = "raleway")) + my_theme
+  ggtitle("Gaussian bases and target data for s_sq = 0.02")  + my_theme
 ```
 Selecting $s^2$ is tricky. It seems as a good option to fit $s^2 = 0.02$, as then four of the gaussian bases would fit nicely at the sinusoid.
 
@@ -206,8 +203,6 @@ BLR <- function(phi_mat, target, alpha, beta) {
 }
 ```
 
-
-
 ```{r BLR_updating}
 BLR_updating <- function(phi_mat, target, alpha, beta) {
   assert_that(is.matrix(phi_mat))
@@ -233,6 +228,18 @@ BLR_updating <- function(phi_mat, target, alpha, beta) {
 }
 ```
 
+```{r}
+BLR_iter <- function(phi_mat, target, alpha, beta){
+  assert_that(is.matrix(phi_mat))
+  assert_that(is.matrix(target))
+  
+  S_N <- solve(alpha * diag(1, 9) + beta * t(phi_mat) %*% phi_mat)
+  m_N <- beta * S_N %*%  t(phi_mat) %*% target
+  
+  
+  return(list(m_N, S_N))
+}
+```
 
 
 We can have a look at the results.
@@ -243,6 +250,9 @@ colnames(w_BLR_result) <- c(paste("n", (1:5) * 20, sep = "_"))
 
 w_BLRupd_result <- matrix(ncol = 5, nrow = 9)
 colnames(w_BLRupd_result) <- c(paste("n", (1:5) * 20, sep = "_"))
+
+w_BLRiter_result <- matrix(ncol = 5, nrow = 9)
+colnames(w_BLRiter_result) <- c(paste("n", (1:5) * 20, sep = "_"))
 
 
 
@@ -255,6 +265,9 @@ for (i in 1:5) {
   w_BLRupd_result[, i] <- BLR_updating(phi_mat = phi_mat, 
                                    target = t_mat, 
                                    alpha = 1, beta = 25)
+  w_BLRiter_result[, i] <- BLR_iter(phi_mat = phi_mat, 
+                                   target = t_mat, 
+                                   alpha = 1, beta = 25)[[1]]
 }
 
 w_BLR_result
@@ -264,7 +277,11 @@ w_BLR_result
 ```{r}
 w_BLRupd_result
 ```
-We can observe that both of these methods provide us with identical weights. Therefore I will use easier method without updating later on in the assignment.
+```{r}
+w_BLRiter_result
+```
+
+We can observe that all of these methods provide us with identical weights. For the consistency of the code I will use the BLR_iter function later on, and because of the way it is written it also provides me with the variance of the weights.
 
 
 
@@ -279,9 +296,9 @@ I will use graphs to show how these methods compare.
 ####################
 
 plot_interactive_graph_BLS_RLS <- function(s_squared, 
-                                   lambda_RLS = 0.01, 
-                                   alpha_BLR = 1, 
-                                   beta_BLR = 25, n_obs = 101) {
+                                           lambda_RLS = 0.01, 
+                                           alpha_BLR = 1, 
+                                           beta_BLR = 25, n_obs = 100, use_BLR_iter = FALSE) {
   values <- data_gen(10)
   values_gaussbases <- values %>% 
     gauss_basis_gen(s_sq = s_squared) %>% 
@@ -289,7 +306,7 @@ plot_interactive_graph_BLS_RLS <- function(s_squared,
   
   for (i in 5:25) {
     val_temp <- data_gen(i * 4) %>% 
-      gauss_basis_gen(s_sq = 0.1) %>% 
+      gauss_basis_gen(s_sq = s_squared) %>% 
       mutate(n = 4 * i)
     values_gaussbases <- rbind(values_gaussbases, val_temp)
   }
@@ -297,20 +314,24 @@ plot_interactive_graph_BLS_RLS <- function(s_squared,
   # finding coefficients and then predictions for every set of data.
   values_predictions <- values %>% 
     mutate(preds_BLR = 0)  %>%  
-    mutate(preds_RLS = 0) %>%
+    mutate(preds_RLS = 0) %>% 
+    mutate(rmse_BLR = 0) %>%
+    mutate(rmse_RLS = 0) %>%
     mutate(n = 0)
   
   
   
-  values_preds_temp <- data_gen(n_obs)  %>% # OCD unfriendly
-    gauss_basis_gen(s_sq = s_squared) %>% 
-    mutate(n = 0)
-  phi_mat_temp <- values_preds_temp %>% 
-      select(starts_with("gauss")) %>% 
-      as.matrix()
+  # values_preds_temp <- data_gen(n_obs)  %>% # OCD unfriendly
+  #   gauss_basis_gen(s_sq = s_squared) %>% 
+  #   mutate(n = 0)
+  # phi_mat_temp <- values_preds_temp %>% 
+  #     select(starts_with("gauss")) %>% 
+  #     as.matrix()
   
   for (i in unique(values_gaussbases$n)) {
-    val_temp <- values_gaussbases %>% filter(n == i)
+    val_temp <- values_gaussbases %>% 
+      filter(n == i) %>% 
+      arrange(x)
     
     phi_mat <- val_temp %>% 
       select(starts_with("gauss")) %>% 
@@ -318,23 +339,31 @@ plot_interactive_graph_BLS_RLS <- function(s_squared,
     t_mat <- as.matrix(val_temp$target)
     
     coefs_RLS    <- RLS(phi_mat, t_mat, lambda = lambda_RLS)
-    coefs_BLR    <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    if(use_BLR_iter) {
+      coefs_BLR <- BLR_iter(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)[[1]]
+    } else{
+      coefs_BLR <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    }
+    preds_BLR <- phi_mat %*% as.matrix(coefs_BLR)
+    preds_RLS <- phi_mat %*% as.matrix(coefs_RLS)
+    rmse_BLR <- sqrt(mean((t_mat - preds_BLR)^2))
+    rmse_RLS <- sqrt(mean((t_mat - preds_RLS)^2))
     
-    val_temp_2 <- cbind(values_preds_temp$x, 
-                        values_preds_temp$target, 
-                        phi_mat_temp %*% as.matrix(coefs_BLR), 
-                        phi_mat_temp %*% as.matrix(coefs_RLS),
-                        rep(i, n_obs))
+    val_temp_2 <- cbind(val_temp$x, 
+                        val_temp$target, 
+                        preds_BLR, 
+                        preds_RLS, 
+                        rep(rmse_BLR, i), 
+                        rep(rmse_RLS, i),
+                        rep(i, i))
     
     # print(dim(val_temp_2))
     colnames(val_temp_2) <- names(values_predictions)
     values_predictions <- rbind(values_predictions, val_temp_2)
   }
-  
-  
-  # 
   values_predictions <- values_predictions %>% 
-     filter(n != 0)
+    filter(n != 0)
+  
   
   # plotting !
   p <- ggplot(values_predictions, aes(x = x))  +
@@ -342,57 +371,71 @@ plot_interactive_graph_BLS_RLS <- function(s_squared,
     geom_line(aes(y = preds_RLS, frame = n, colour = sprintf("RLS, lambda = %s", lambda_RLS))) + 
     geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.3) + 
     geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.3)  +
-    ggtitle(sprintf("Comparision of performance of RLS and BLR when s_squared = %s", s_squared)) + 
-    labs(y = "predictions and targets", colour = "colours") + my_theme
+    ggtitle("Comparision of  RLS and BLR") + 
+    labs(y = "predictions and targets", colour = "colours")  + my_theme
   plot <- ggplotly(p) %>%
-    animation_opts(easing = "linear",redraw = FALSE)
-  plot
+    animation_opts(easing = "linear",redraw = FALSE) 
+  rmse <- values_predictions %>% 
+    group_by(n) %>% 
+    select(n, rmse_BLR, rmse_RLS) %>% 
+    summarise(rmse_BLR = mean(rmse_BLR), rmse_RLS = mean(rmse_RLS)) %>% 
+    filter(n %% 20 == 0)
+  res <- list(plot, rmse)
+  return(res)
 }
 ```
 
 
-In the following graph, we can control on how many points were the models trained and then we predict 100 points using these estimates. I set the values to the same values chosen in previous parts. I will also select $s^2 = 0.1$. We can observe throughout the assignment that this value provides us with best results.
+In the following graph, we can control on how many points were the models trained and then we look at how the model fits the data. I set the values to the same values chosen in previous parts. I will also select $s^2 = 0.1$. 
 
-Regarding the models, we can observe that in this setup BLR is performing better on small samples and quickly converges to true distribution . However $\lambda$ in RLS is restricting overfitting of the data. In this case it is too restrictive and therefore BLR is closer to the original distribution.
+Regarding the models, we can observe that in this setup BLR is performing better on small samples and quickly converges to true distribution . However $\lambda$ in RLS is restricting overfitting of the data. In this case it is too restrictive and therefore BLR is closer to the original distribution. As we can observe later on, hyperparameters of BLR are set to almost ideal values.
 
-```{r plot BLS RLS 1}
-plot_interactive_graph_BLS_RLS(s_squared = 0.1, lambda_RLS = 1, alpha_BLR = 1, beta_BLR = 25)
+```{r plot BLS RLS 1, warning=FALSE, error=FALSE, message=FALSE}
+p1 <- plot_interactive_graph_BLS_RLS(s_squared = 0.1, lambda_RLS = 1, alpha_BLR = 0.15, beta_BLR = 100, use_BLR_iter = TRUE)
 
+p1[[1]]
+```
+
+This can be also observed using RMSE. Restricted RLS has higher RLS. But logically RMSE is decreasing with increasing number of observations.
+```{r}
+p1[[2]]
 ```
 
 
-In the following graph I have set $s^2$ to smaller value, and at this moment BLR is prone to overfitting of the values and even though it is better performing with small amount of observations, for higher amount of observations it is outperformed by strongly restricted RLS, which better 
+In the following graph I set $\lambda$ in RLS model really low and I chose $\alpha = 1$ and $\beta = 2$
+We can osberve that in this setting RLS are outperforming Bayesian model.
 
-```{r BLS RLS 2, warning=FALSE, error=FALSE, message}
-plot_interactive_graph_BLS_RLS(s_squared = 0.05, lambda_RLS = 1, alpha_BLR = 1, beta_BLR = 25)
+```{r BLS RLS 2, warning=FALSE, error=FALSE, message=FALSE}
+p2 <- plot_interactive_graph_BLS_RLS(s_squared = 0.1, lambda_RLS = 0.001, alpha_BLR = 2, beta_BLR = 2, use_BLR_iter = TRUE)
+p2[[1]]
 ```
 
-In the next graph we can observe that if we choose too big variance of the bases, even unrestricted LS and optimal BLR is useless. Therefore, we should be careful with selecting parameters of gaussian basis functions.
+This can be again supported by calculating RMSE.
 
-```{r BLS RLS 3}
-plot_interactive_graph_BLS_RLS(s_squared = 0.2, lambda_RLS = 0, alpha_BLR = 2, beta_BLR = 100)
+```{r}
+p2[[2]]
+```
+
+In the next graph we compare the better variants of the previous cases. We can observe they are behaving almost identically.
+
+```{r BLS RLS 3, warning=FALSE, error=FALSE, message=FALSE}
+p3 <- plot_interactive_graph_BLS_RLS(s_squared = 0.1, lambda_RLS = 0.001, alpha_BLR = 0.15, beta_BLR = 100, use_BLR_iter = TRUE)
+p3[[1]]
+```
+
+In this case, RLS are just a bit better, what can be seen in following table:
+```{r}
+p3[[2]]
 ```
 
 ## Exercise 5 - estimating $\alpha$ and $\beta$ of BLR
 In this section I use simplified version of BLR based on equations 3.53 and 3.54 of Bishop (2009). And using 3.90, 3.91, 3.92 and 3.95 I estimate hyperparameters $\alpha$ and $\beta$, which are used afterwards for estimating parameters of Gauss basis functions.
 
 
-```{r BLR_optimal, echo=FALSE}
+```{r BLR_optimal}
 #########
 # Ex 5  #
 #########
-
-BLR_iter <- function(phi_mat, target, alpha, beta){
-  assert_that(is.matrix(phi_mat))
-  assert_that(is.matrix(target))
-  
-  S_N <- solve(alpha * diag(1, 9) + beta * t(phi_mat) %*% phi_mat)
-  m_N <- beta * S_N %*%  t(phi_mat) %*% target
-  
-  
-  return(list(m_N, S_N))
-}
-
 BLR_optimal <- function(phi_mat, t_mat, 
                         max_n_iter = 1000, 
                         min_d_alpha = 0.001, 
@@ -403,9 +446,8 @@ BLR_optimal <- function(phi_mat, t_mat,
   iteration <- 1 
   d_alpha <- 10
   d_beta <- 10
-  
-  while ((iteration < max_n_iter) & 
-         ((abs(d_alpha) > min_d_alpha) | (abs(d_beta) > min_d_beta))) {
+  evaluation <- TRUE
+  while (evaluation) {
     lambdas <- eigen(beta * t(phi_mat) %*% phi_mat)$values
     gamma <- 0
     for (lambda in lambdas) {
@@ -429,6 +471,15 @@ BLR_optimal <- function(phi_mat, t_mat,
     d_beta <- (1/((1 / (nrow(phi_mat) - gamma)) * SSR)) - beta
     beta <- as.numeric(beta + d_beta)
     iteration <- iteration + 1
+    
+    #For some reason, the evaluation condition sometimes breaks. I really dont know why.
+    # Therefore, I added this try/catch block.
+    
+    evaluation <- tryCatch({
+      (iteration < max_n_iter) & 
+         ((abs(d_alpha) > min_d_alpha) | (abs(d_beta) > min_d_beta))
+      }, error = function(e){return(FALSE)}
+    )
   }
   if (echo) {
     print(paste("iteration", iteration))
@@ -436,13 +487,14 @@ BLR_optimal <- function(phi_mat, t_mat,
     #print(as.numeric(d_beta))
     print(paste("alpha", alpha))
     print(paste("beta", beta))
+    
   }
   return(m_N)
 }
 ```
 
 Results, using $s^2 = 0.1$:
-
+We can also see how many iterations it took until optimal values for alpha and beta were calculated, and I also report optimal values for alpha and beta. We have already seen how function with similar parameters. However, this function calculates optimal alpha and beta for any size of the sample.
 ```{r, echo=FALSE}
 w_BLRopt_result <- matrix(ncol = 5, nrow = 9)
 colnames(w_BLRopt_result) <- c(paste("n", (1:5) * 20, sep = "_"))
@@ -461,6 +513,122 @@ w_BLRopt_result
 
 It will be also interesting to see what is the performance of this model which uses optimal BLR.
 
+```{r, echo = FALSE, warning=FALSE, error=FALSE, message=FALSE}
+plot_interactive_graph_BLRopt<- function(s_squared, 
+                                           lambda_RLS = 0.01, 
+                                           alpha_BLR = 1, 
+                                           beta_BLR = 25, n_obs = 100) {
+  values <- data_gen(10)
+  values_gaussbases <- values %>% 
+    gauss_basis_gen(s_sq = s_squared) %>% 
+    mutate(n = 10)
+  
+  for (i in 5:25) {
+    val_temp <- data_gen(i * 4) %>% 
+      gauss_basis_gen(s_sq = s_squared) %>% 
+      mutate(n = 4 * i)
+    values_gaussbases <- rbind(values_gaussbases, val_temp)
+  }
+  
+  # finding coefficients and then predictions for every set of data.
+  values_predictions <- values %>% 
+    mutate(preds_BLR = 0)  %>%  
+    mutate(preds_RLS = 0) %>%  
+    mutate(preds_BLRopt = 0) %>% 
+    mutate(rmse_BLR = 0) %>%
+    mutate(rmse_RLS = 0) %>% 
+    mutate(rmse_BLRopt = 0) %>%
+    mutate(n = 0)
+  
+  
+  
+  # values_preds_temp <- data_gen(n_obs)  %>% # OCD unfriendly
+  #   gauss_basis_gen(s_sq = s_squared) %>% 
+  #   mutate(n = 0)
+  # phi_mat_temp <- values_preds_temp %>% 
+  #     select(starts_with("gauss")) %>% 
+  #     as.matrix()
+  
+  for (i in unique(values_gaussbases$n)) {
+    val_temp <- values_gaussbases %>% 
+      filter(n == i) %>% 
+      arrange(x)
+    
+    phi_mat <- val_temp %>% 
+      select(starts_with("gauss")) %>% 
+      as.matrix()
+    t_mat <- as.matrix(val_temp$target)
+    
+    coefs_RLS    <- RLS(phi_mat, t_mat, lambda = lambda_RLS)
+    coefs_BLR    <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    preds_BLR <- phi_mat %*% as.matrix(coefs_BLR)
+    preds_RLS <- phi_mat %*% as.matrix(coefs_RLS)
+    rmse_BLR <- sqrt(mean((t_mat - preds_BLR)^2))
+    rmse_RLS <- sqrt(mean((t_mat - preds_RLS)^2))
+    coefs_BLRopt <- BLR_optimal(phi_mat, t_mat)
+    preds_BLRopt <- phi_mat %*% as.matrix(coefs_BLRopt)
+    rmse_BLRopt <- sqrt(mean((t_mat - preds_BLRopt)^2))
+    
+    
+    val_temp_2 <- cbind(val_temp$x, 
+                        val_temp$target, 
+                        preds_BLR, 
+                        preds_RLS,
+                        preds_BLRopt,
+                        rep(rmse_BLR, i), 
+                        rep(rmse_RLS, i),
+                        rep(rmse_BLRopt, i),
+                        rep(i, i))
+    
+    # print(dim(val_temp_2))
+    colnames(val_temp_2) <- names(values_predictions)
+    values_predictions <- rbind(values_predictions, val_temp_2)
+  }
+  values_predictions <- values_predictions %>% 
+    filter(n != 0)
+  
+  
+  # plotting !
+  p <- ggplot(values_predictions, aes(x = x))  +
+    geom_line(aes(y = preds_BLR, frame = n, colour = sprintf("BLR, alpha = %s, beta = %s", alpha_BLR, beta_BLR))) +
+    geom_line(aes(y = preds_RLS, frame = n, colour = sprintf("RLS, lambda = %s", lambda_RLS))) + 
+    geom_line(aes(y = preds_BLRopt, frame = n, colour = "BLR_optimal")) + 
+    geom_point(aes(x = x, y = target, frame = n, colour = "target"), alpha = 0.3) + 
+    geom_line(aes(x = x, y = sin(2 * pi * x), colour = "sin(2*pi*x)"), alpha = 0.3)  +
+    ggtitle("Comparision of  RLS and BLR") + 
+    labs(y = "predictions and targets", colour = "colours")  + my_theme
+  plot <- ggplotly(p) %>%
+    animation_opts(easing = "linear",redraw = FALSE) 
+  rmse <- values_predictions %>% 
+    group_by(n) %>% 
+    select(n, rmse_BLR, rmse_RLS, rmse_BLRopt) %>% 
+    summarise(rmse_BLR = mean(rmse_BLR), 
+              rmse_RLS = mean(rmse_RLS), 
+              rmse_BLRopt = mean(rmse_BLRopt)) %>% 
+    filter(n %% 20 == 0)
+  res <- list(plot, rmse)
+  return(res)
+}
+```
+
+
+We can easily compare the methods. In this case I intentionally set parameters of previous method so they are not producing optimal values. We can observe that this shows the strength of this iterative method while looking for optimal alpha and beta. BLR with calculated optimal values for alpha and beta quickly converges to original distribution and performs better even in larger samples.
+
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+p4 <- plot_interactive_graph_BLRopt(s_squared = 0.1, lambda_RLS = 1, alpha_BLR = 1, beta_BLR = 2)
+p4[[1]]
+```
+We can observe that optimal BLR outperforms both previously presented methods in this case.
+
+```{r}
+p4[[2]]
+```
+
+## Exercise 6
+To evaluate the performance of the models, I would use another (test) sample which I would try to predict using other observations, used for model training. Afterwards, I would use performance evaluation metrics such as already presented RMSE, or MAE. If the problem would be of classification nature, It would be handy to calculate accuracy - how many times I have correctly guessed the right class. This actually is not the current case.
+
+In the following graph we can observe how presented models behave in prediction of hundred randomly chosen points. We can control on how many points were the models trained.
+
 ```{r plot_interactive_graph, echo=FALSE}
 plot_interactive_graph <- function(s_squared, 
                                    lambda_RLS = 0.01, 
@@ -473,7 +641,7 @@ plot_interactive_graph <- function(s_squared,
   
   for (i in 5:25) {
     val_temp <- data_gen(i * 4) %>% 
-      gauss_basis_gen(s_sq = 0.1) %>% 
+      gauss_basis_gen(s_sq = s_squared) %>% 
       mutate(n = 4 * i)
     values_gaussbases <- rbind(values_gaussbases, val_temp)
   }
@@ -504,7 +672,7 @@ plot_interactive_graph <- function(s_squared,
     
     coefs_BLRopt <- BLR_optimal(phi_mat, t_mat)
     coefs_RLS    <- RLS(phi_mat, t_mat, lambda = lambda_RLS)
-    coefs_BLR    <- BLR(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)
+    coefs_BLR    <- BLR_iter(phi_mat, t_mat, alpha = alpha_BLR, beta = beta_BLR)[[1]]
     
     val_temp_2 <- cbind(values_preds_temp$x, 
                         values_preds_temp$target, 
@@ -538,13 +706,10 @@ plot_interactive_graph <- function(s_squared,
 
 
 
-plot_interactive_graph(s_squared = 0.08, lambda_RLS = 0.01, alpha_BLR = 1, beta_BLR = 25)
+#plot_interactive_graph(s_squared = 0.1, lambda_RLS = 0.01, alpha_BLR = 1, beta_BLR = 25)
 ```
 
-```{r}
-plot_interactive_graph(0.1)
-```
-```{r}
-plot_interactive_graph(0.2)
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+plot_interactive_graph(0.1, lambda_RLS = 0.1, alpha_BLR = 2, beta_BLR = 10)
 ```
 
